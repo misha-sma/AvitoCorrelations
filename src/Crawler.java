@@ -13,37 +13,40 @@ import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
 
 public class Crawler {
-	private static final String BASE_URL = "http://www.avito.ru/sankt-peterburg/avtomobili_s_probegom/";
+	private static final String BASE_URL = "http://www.avito.ru";
+	private static final String BASE_URL_1 = BASE_URL + "/sankt-peterburg/avtomobili_s_probegom/";
 	private static final String MARK = "renault";
 	private static final String MODEL = "logan";
-	private static final String BASE_URL_2 = BASE_URL + MARK + "/" + MODEL;
-	private static final Pattern TAB_PATTERN = Pattern
-			.compile("<a href=\"/sankt-peterburg/avtomobili_s_probegom/renault/logan\\?p=[0-9]+\">([0-9]+)</a>");
-
-	private static final String FIRST_PART_URL = "http://www.all-sbor.net/board/cat_29.html?page=";
-	private static final String SECOND_PART_URL = "&pagestyle=collapsed&stronpage=50&part=2";
-
+	private static final String BASE_URL_2 = BASE_URL_1 + MARK + "/" + MODEL;
+	private static final Pattern TAB_PATTERN = Pattern.compile("<a href=\"/sankt-peterburg/avtomobili_s_probegom/"
+			+ MARK + "/" + MODEL + "\\?p=[0-9]+\">([0-9]+)</a>");
+	private static final Pattern URL_PATTERN = Pattern.compile("<a[ ]+href=\"(/sankt-peterburg/avtomobili_s_probegom/"
+			+ MARK + "_" + MODEL + "_[0-9]+_[0-9]+)");
+	private static final Pattern YEAR_PATTERN = Pattern.compile("\\d{4}");
 	private static final CloseableHttpClient httpClient = HttpClients.createDefault();
 
 	public static void main(String[] args) {
 		int pagesCount = getPagesCount();
 		System.out.println("pagesCount=" + pagesCount);
-		System.exit(0);
 		try {
 			for (int pageNumber = 1; pageNumber <= pagesCount; ++pageNumber) {
 				System.out.println("PAGE NUMBER=" + pageNumber);
 				Util.sleep();
-				HttpGet httpGet = new HttpGet(FIRST_PART_URL + pageNumber + SECOND_PART_URL);
+				HttpGet httpGet = new HttpGet(BASE_URL_2 + "?p=" + pageNumber);
 				prepareRequest(httpGet);
 				CloseableHttpResponse response = httpClient.execute(httpGet);
 				System.out.println(response.getStatusLine());
 				HttpEntity entity = response.getEntity();
-				String html = EntityUtils.toString(entity, "cp1251");
+				String html = EntityUtils.toString(entity);
+				// Util.writeBytes2File(html.getBytes(),
+				// "/home/misha-sma/AvitoCorrelations/page_" + pageNumber +
+				// ".html");
 				EntityUtils.consume(entity);
 				response.close();
 				List<String> urls = getAdUrls(html);
 				System.out.println("urls count=" + urls.size());
 				System.out.println("urls=" + urls);
+				// System.exit(0);
 				dowloadUrls(urls);
 			}
 		} catch (ClientProtocolException e) {
@@ -89,10 +92,10 @@ public class Crawler {
 				CloseableHttpResponse response = httpClient.execute(httpGet);
 				System.out.println(response.getStatusLine());
 				HttpEntity entity = response.getEntity();
-				String html = EntityUtils.toString(entity, "cp1251");
+				String html = EntityUtils.toString(entity);
 				EntityUtils.consume(entity);
 				response.close();
-				String[] textWithImageUrl = parseText(html);
+				String[] textWithImageUrl = parseText(html, url);
 				String text = textWithImageUrl[0];
 				String imageUrl = textWithImageUrl[1];
 				System.out.println(text);
@@ -130,7 +133,10 @@ public class Crawler {
 		}
 	}
 
-	private static String[] parseText(String html) {
+	private static String[] parseText(String html, String url) {
+		Matcher yearMatcher = YEAR_PATTERN.matcher(url);
+		int year = yearMatcher.find() ? Integer.parseInt(yearMatcher.group()) : 0;
+
 		String dirtyText = Util.parseForPrefixWithDelimeter(html, "<td class=\"rub\">",
 				"<table cellspacing=\"0\" cellpadding=\"0\" class=\"table100\"");
 		String[] result = new String[2];
@@ -143,7 +149,7 @@ public class Crawler {
 		String text = Util.cleanText(dirtyText);
 		String imageUrl = Util.parseForPrefixWithDelimeter(dirtyText, "<img src=\"", "\" style=");
 		result[0] = text;
-		result[1] = imageUrl.isEmpty() ? "" : BASE_URL + imageUrl;
+		result[1] = imageUrl.isEmpty() ? "" : BASE_URL_1 + imageUrl;
 		return result;
 	}
 
@@ -158,17 +164,9 @@ public class Crawler {
 
 	private static List<String> getAdUrls(String text) {
 		List<String> urls = new LinkedList<String>();
-		String[] dirtyUrls = text.split("<a href=\"/board/details_");
-		for (int i = 1; i < dirtyUrls.length; ++i) {
-			int index = dirtyUrls[i].indexOf("\">");
-			if (index == -1) {
-				continue;
-			}
-			String title = Util.parseForPrefixWithDelimeter(dirtyUrls[i], "\">", "</a>");
-			if (!Util.isTitleTrue(title)) {
-				continue;
-			}
-			String url = BASE_URL + "/board/details_" + dirtyUrls[i].substring(0, index);
+		Matcher urlMatcher = URL_PATTERN.matcher(text);
+		while (urlMatcher.find()) {
+			String url = BASE_URL + urlMatcher.group(1);
 			urls.add(url);
 		}
 		return urls;
