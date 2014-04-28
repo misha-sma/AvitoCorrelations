@@ -23,6 +23,17 @@ public class Crawler {
 	private static final Pattern URL_PATTERN = Pattern.compile("<a[ ]+href=\"(/sankt-peterburg/avtomobili_s_probegom/"
 			+ MARK + "_" + MODEL + "_[0-9]+_[0-9]+)");
 	private static final Pattern YEAR_PATTERN = Pattern.compile("\\d{4}");
+	private static final Pattern PRICE_PATTERN = Pattern.compile("<strong itemprop=\"price\">([0-9]+&nbsp;[0-9]+)");
+	private static final Pattern RUN_PATTERN = Pattern.compile("title=\"Пробег &mdash;([0-9 ]+)-([0-9 ]+)");
+	private static final Pattern VOLUME_PATTERN = Pattern
+			.compile(",[ ]+(1.\\d)[ ]+<a href=\"/sankt-peterburg/avtomobili_s_probegom");
+	private static final Pattern COLOR_PATTERN = Pattern.compile(",[ ]+цвет[ ]+(*)[ ]+</div>[ ]+</div>");
+	private static final Pattern BROKEN_PATTERN = Pattern.compile(",[ ]+битый[ ]+</div>[ ]+</div>");
+	private static final Pattern DILER_PATTERN = Pattern
+			.compile("<a href=\"/auto-traider\" title=\"Перейти на страницу автодилера &laquo;(*)&raquo;");
+	private static final Pattern FULLTEXT_PATTERN = Pattern
+			.compile("<div class=\"description description-text\"> <div id=\"desc_text\" itemprop=\"description\"><p>(*)<div class=\"item_sku\">");
+
 	private static final CloseableHttpClient httpClient = HttpClients.createDefault();
 
 	public static void main(String[] args) {
@@ -134,23 +145,27 @@ public class Crawler {
 	}
 
 	private static String[] parseText(String html, String url) {
+		Matcher brokenMatcher = BROKEN_PATTERN.matcher(html);
+		if (brokenMatcher.find()) {
+			return null;
+		}
+
 		Matcher yearMatcher = YEAR_PATTERN.matcher(url);
 		int year = yearMatcher.find() ? Integer.parseInt(yearMatcher.group()) : 0;
-
-		String dirtyText = Util.parseForPrefixWithDelimeter(html, "<td class=\"rub\">",
-				"<table cellspacing=\"0\" cellpadding=\"0\" class=\"table100\"");
-		String[] result = new String[2];
-		result[0] = "";
-		result[1] = "";
-		if (dirtyText.isEmpty()) {
-			System.err.println("Empty ad!!!");
-			return result;
-		}
-		String text = Util.cleanText(dirtyText);
-		String imageUrl = Util.parseForPrefixWithDelimeter(dirtyText, "<img src=\"", "\" style=");
-		result[0] = text;
-		result[1] = imageUrl.isEmpty() ? "" : BASE_URL_1 + imageUrl;
-		return result;
+		Matcher priceMatcher = PRICE_PATTERN.matcher(html);
+		int price = priceMatcher.find() ? Integer.parseInt(priceMatcher.group(1).replace("&nbsp;", "")) : 0;
+		Matcher runMatcher = RUN_PATTERN.matcher(html);
+		int run = runMatcher.find() ? Integer.parseInt(runMatcher.group(1).replace(" ", "")) : 0;
+		Matcher volumeMatcher = VOLUME_PATTERN.matcher(html);
+		double volume = volumeMatcher.find() ? Integer.parseInt(volumeMatcher.group(1)) : 0;
+		Matcher colorMatcher = COLOR_PATTERN.matcher(html);
+		String color = colorMatcher.find() ? colorMatcher.group(1) : "";
+		Matcher dilerMatcher = DILER_PATTERN.matcher(html);
+		String diler = dilerMatcher.find() ? dilerMatcher.group(1) : "";
+		Matcher fulltextMatcher = FULLTEXT_PATTERN.matcher(html);
+		String fulltext = fulltextMatcher.find() ? fulltextMatcher.group(1).replace("<p>", "").replace("</p>", "")
+				.replace("</div>", "") : "";
+		return null;
 	}
 
 	private static int parsePagesCount(String text) {
